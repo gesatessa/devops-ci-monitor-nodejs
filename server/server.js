@@ -1,6 +1,6 @@
 const express = require('express');
 const bodyParser = require('body-parser');
-const mysql = require('mysql');
+const mysql = require('mysql2');
 const cors = require('cors');
 const path = require('path');
 
@@ -11,39 +11,41 @@ const port = process.env.PORT || 5000; // Use an environment variable for the po
 app.use(cors());
 app.use(bodyParser.json());
 
+let db;
+
 // Database connection
-const db = mysql.createConnection({
-  host: process.env.DB_HOST || 'localhost', // Use 'mysql' to connect to MySQL container
-  user: process.env.DB_USER || 'appuser',
-  password: process.env.DB_PASSWORD || 'password123',
-  database: process.env.DB_NAME || 'test_db',
-});
+// const db = mysql.createConnection({
+//   host: process.env.DB_HOST || 'localhost', // Use 'mysql' to connect to MySQL container
+//   user: process.env.DB_USER || 'appuser',
+//   password: process.env.DB_PASSWORD || 'password123',
+//   database: process.env.DB_NAME || 'test_db',
+// });
 
-db.connect((err) => {
-  if (err) {
-    console.error('Database connection failed:', err.stack);
-    process.exit(1);
-  }
-  console.log('Database connected.');
+// db.connect((err) => {
+//   if (err) {
+//     console.error('Database connection failed:', err.stack);
+//     process.exit(1);
+//   }
+//   console.log('Database connected.');
 
-  // Initialize database with `users` table if it doesn't exist
-  const createUsersTable = `
-    CREATE TABLE IF NOT EXISTS users (
-      id INT AUTO_INCREMENT PRIMARY KEY,
-      name VARCHAR(255) NOT NULL,
-      email VARCHAR(255) NOT NULL UNIQUE,
-      role ENUM('Admin', 'User') NOT NULL
-    )
-  `;
+//   // Initialize database with `users` table if it doesn't exist
+//   const createUsersTable = `
+//     CREATE TABLE IF NOT EXISTS users (
+//       id INT AUTO_INCREMENT PRIMARY KEY,
+//       name VARCHAR(255) NOT NULL,
+//       email VARCHAR(255) NOT NULL UNIQUE,
+//       role ENUM('Admin', 'User') NOT NULL
+//     )
+//   `;
 
-  db.query(createUsersTable, (err, results) => {
-    if (err) {
-      console.error('Failed to create users table:', err.stack);
-      process.exit(1);
-    }
-    console.log('Users table initialized or already exists.');
-  });
-});
+//   db.query(createUsersTable, (err, results) => {
+//     if (err) {
+//       console.error('Failed to create users table:', err.stack);
+//       process.exit(1);
+//     }
+//     console.log('Users table initialized or already exists.');
+//   });
+// });
 
 // API Routes
 app.get('/api/users', (req, res) => {
@@ -95,7 +97,52 @@ app.get('*', (req, res) => {
 });
 
 // Start server
-app.listen(port, () => {
-  console.log(`Server is running on http://localhost:${port}`);
-});
+// app.listen(port, () => {
+//   console.log(`Server is running on http://localhost:${port}`);
+// });
 
+
+function connectWithRetry() {
+  db = mysql.createConnection({
+    host: process.env.DB_HOST || 'localhost',
+    user: process.env.DB_USER || 'appuser',
+    password: process.env.DB_PASSWORD || 'password123',
+    database: process.env.DB_NAME || 'test_db',
+  });
+
+  db.connect((err) => {
+    if (err) {
+      console.error('Database connection failed:', err.message);
+      console.log('Retrying in 5 seconds...');
+
+      setTimeout(connectWithRetry, 5000);
+      return;
+    }
+
+    console.log('Database connected.');
+
+    const createUsersTable = `
+      CREATE TABLE IF NOT EXISTS users (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        email VARCHAR(255) NOT NULL UNIQUE,
+        role ENUM('Admin', 'User') NOT NULL
+      )
+    `;
+
+    db.query(createUsersTable, (err) => {
+      if (err) {
+        console.error('Failed to create users table:', err.message);
+        return;
+      }
+
+      console.log('Users table initialized or already exists.');
+
+      app.listen(port, () => {
+        console.log(`Server is running on http://localhost:${port}`);
+      });
+    });
+  });
+}
+
+connectWithRetry();

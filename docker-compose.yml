@@ -1,0 +1,45 @@
+services:
+  app:
+    build: .
+
+    ports:
+      - "5000:5000"
+
+    environment:
+      PORT: 5000
+      DB_HOST: db
+      DB_USER: appuser
+      DB_PASSWORD: password123
+      DB_NAME: test_db
+
+    depends_on:
+      db:
+        condition: service_healthy
+
+    restart: unless-stopped
+
+  db:
+    image: mysql:8.0
+
+    restart: unless-stopped
+
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: test_db
+      MYSQL_USER: appuser
+      MYSQL_PASSWORD: password123
+
+    ports:
+      - "3306:3306"
+
+    volumes:
+      - mysql_data:/var/lib/mysql
+    
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 5s
+      timeout: 4s
+      retries: 3
+
+volumes:
+  mysql_data:
